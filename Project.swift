@@ -2,6 +2,9 @@ import ProjectDescription
 
 let project = Project(
     name: "App",
+    packages: [
+        .package(url: "git@github.com:giorgio-romano_amplifon/MyLibrary.git", .branch("master"))
+    ],
     targets: [
         .target(
             name: "App",
@@ -19,7 +22,7 @@ let project = Project(
             sources: ["App/Sources/**"],
             resources: ["App/Resources/**"],
             dependencies: [
-                .external(name: "MyLibrary")
+                .package(product: "MyLibrary", type: .runtime)
             ]
         ),
         .target(
