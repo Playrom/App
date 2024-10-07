@@ -1,4 +1,5 @@
 import SwiftUI
+import MyLibrary
 
 public struct ContentView: View {
     public init() {}
@@ -6,6 +7,9 @@ public struct ContentView: View {
     public var body: some View {
         Text("Hello, World!")
             .padding()
+            .task {
+                print(miao)
+            }
     }
 }
 
