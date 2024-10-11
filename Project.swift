@@ -3,7 +3,7 @@ import ProjectDescription
 let project = Project(
     name: "App",
     packages: [
-        .package(url: "git@github.com:giorgio-romano_amplifon/MyLibrary.git", .branch("master"))
+        .package(url: "git@github.com:Playrom/MyLibrary.git", .branch("master"))
     ],
     targets: [
         .target(

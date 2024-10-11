@@ -1,10 +1,10 @@
 {
-  "originHash" : "8459d00ae1f7983d2dfc43e2bd33f83603014b209fcb768d1e2b0fa4b6bd3157",
+  "originHash" : "eb655124f4b7c8cb25cfd64738ff32f291f36139b922cad62cb2ec3debabb296",
   "pins" : [
     {
       "identity" : "mylibrary",
       "kind" : "remoteSourceControl",
-      "location" : "git@github.com:giorgio-romano_amplifon/MyLibrary.git",
+      "location" : "git@github.com:Playrom/MyLibrary.git",
       "state" : {
         "branch" : "master",
         "revision" : "fb2f70af9add5a0a6fff5840e1dad2801b6a044b"
