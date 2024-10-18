@@ -31,13 +31,21 @@ jobs:
             exit 1
           fi
 
-          echo "PR Body: $PR_BODY"
+          # Sanitize the PR_BODY to remove problematic characters like newlines
+          SANITIZED_PR_BODY=$(echo "$PR_BODY" | tr -d '\n' | tr -d '\r')
+
+          # Set PR_BODY as output to use in subsequent steps
+          echo "pr_body=$SANITIZED_PR_BODY" >> $GITHUB_OUTPUT   # Write it to the output file
+          echo "PR Body: $SANITIZED_PR_BODY"
 
       - name: Start - Extract Related PRs from Main PR Body
         id: extract_related_prs
         if: ${{ success() && steps.check_event.outcome == 'success' }}  # Only run if the previous step was successful
         run: |
-          echo "Step 1: Extracting related PR URLs from the main PR body..."
+          # Here you use the GitHub Action output in a bash script
+          PR_BODY="${{ steps.check_event.outputs.pr_body }}"  # Correctly use the output from the previous step
+          echo "PR Body From Previous Step: $PR_BODY"
+          
           # Extract related PR URLs from the PR body.
           RELATED_PRS=$(echo "$PR_BODY" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
 
