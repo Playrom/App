@@ -12,7 +12,7 @@ jobs:
         id: fetch_prs
         run: |
           echo "Fetching all open PRs in the repository..."
-          prs=$(curl -s -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+          prs=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls?state=open" | jq -r '.[].number')
           
           if [ -z "$prs" ]; then
@@ -28,7 +28,7 @@ jobs:
           for pr in ${{ steps.fetch_prs.outputs.open_prs }}; do
             echo "Re-triggering checks for PR #$pr"
             curl -X POST \
-              -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+              -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-releated-prs-across-repositories.yml/dispatches" \
               -d "{\"ref\":\"refs/pull/$pr/head\"}"
