@@ -7,37 +7,37 @@ on:
 jobs:
   rerun-pr-verifications:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Fetch All Open PRs with Branch Names
-        id: fetch_prs_with_branches
+      - name: Fetch All Open PRs with PR Body
+        id: fetch_prs_with_body
         run: |
-          echo "Fetching all open PRs with branch names in the repository..."
+          echo "Fetching all open PRs with PR body in the repository..."
           response=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
 
-          # Extract PR numbers and branch names from the response
-          prs=$(echo "$response" | jq -r '.[] | {number: .number, branch: .head.ref} | @base64')
+          # Extract PR numbers and PR bodies from the response
+          prs=$(echo "$response" | jq -r '.[] | {number: .number, body: .body, branch: .head.ref} | @base64')
 
           if [ -z "$prs" ]; then
             echo "No open pull requests found."
             exit 0
           fi
 
-          echo "PRs and Branches found:"
-          echo "$prs"
-
-          # Process PR numbers and branch names directly
+          # Loop through each PR and trigger workflow_dispatch with the PR body
           for pr in $prs; do
             pr_json=$(echo "$pr" | base64 --decode)
-            number=$(echo "$pr_json" | jq -r '.number')
-            branch=$(echo "$pr_json" | jq -r '.branch')
-            echo "PR #$number on branch $branch"
+            pr_number=$(echo "$pr_json" | jq -r '.number')
+            pr_body=$(echo "$pr_json" | jq -r '.body')
+            pr_branch=$(echo "$pr_json" | jq -r '.branch')
 
-            # Trigger the check-related-prs workflow for this PR's branch
-            echo "Re-triggering checks for branch $branch"
+            echo "Processing PR #$pr_number on branch $pr_branch"
+
+            # Trigger the check-related-prs workflow for this PR, passing the PR body as input
+            echo "Re-triggering checks for PR #$pr_number with workflow_dispatch"
             curl -X POST \
               -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-releated-prs-across-repositories.yml/dispatches" \
-              -d "{\"ref\":\"$branch\"}"
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-related-prs.yml/dispatches" \
+              -d "{\"ref\":\"$pr_branch\", \"inputs\": {\"pr_body\": \"$pr_body\"}}"
           done
