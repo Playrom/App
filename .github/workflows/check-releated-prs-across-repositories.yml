@@ -2,7 +2,8 @@ name: Check All Related PRs Status Across Repositories
 
 on:
   pull_request:
-    types: [opened, synchronize]  # Trigger only on main PR creation or update
+    types: [opened, synchronize]
+  workflow_dispatch:  # Allows manual/API triggering
 
 jobs:
   check-related-prs:
@@ -11,22 +12,15 @@ jobs:
       - name: Start - Extract Related PRs from Main PR Body
         run: |
           echo "Step 1: Starting extraction of related PRs from the main PR body..."
-
-      - name: Extract Related PRs from Main PR Body
-        id: extract_related_prs
-        run: |
-          echo "Extracting related PR URLs from the main PR description..."
-          # Extract related PR URLs from the PR body and handle multiline properly
+          # Extract related PR URLs from the PR body
           RELATED_PRS=$(echo "${{ github.event.pull_request.body }}" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
 
-          # Check if related PRs are found
           if [ -z "$RELATED_PRS" ]; then
             echo "No related PRs found. Assuming no dependencies."
             echo "all_merged=true" >> $GITHUB_ENV
             exit 0
           fi
 
-          # Set the related PRs as output to be used in the next steps
           echo "Related PRs found: $RELATED_PRS"
           echo "related_prs=$RELATED_PRS" >> $GITHUB_OUTPUT
 
@@ -39,23 +33,14 @@ jobs:
         run: |
           echo "Checking the merge status of the following PRs: ${{ steps.extract_related_prs.outputs.related_prs }}"
 
-          # Initialize flag to track if all PRs are merged
           ALL_MERGED=true
-
-          # Loop through each related PR URL and check its merge status
           for PR_URL in ${{ steps.extract_related_prs.outputs.related_prs }}; do
             echo "Checking PR: $PR_URL"
-
             PR_NUMBER=$(basename "$PR_URL")
             REPO_FULL_NAME=$(echo "$PR_URL" | sed 's|https://github.com/||' | sed 's|/pull/.*||')
-
-            echo "Repository: $REPO_FULL_NAME, PR Number: $PR_NUMBER"
-            
-            # Get the PR status using GitHub API
-            PR_STATUS=$(curl -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+            PR_STATUS=$(curl -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
               "https://api.github.com/repos/$REPO_FULL_NAME/pulls/$PR_NUMBER" | jq -r '.merged')
 
-            # Check if PR is merged
             if [ "$PR_STATUS" != "true" ]; then
               ALL_MERGED=false
               echo "Related PR $PR_NUMBER in repository $REPO_FULL_NAME is NOT merged."
@@ -64,15 +49,7 @@ jobs:
             fi
           done
 
-          # If any PR is not merged, fail the job
           if [ "$ALL_MERGED" != "true" ]; then
             echo "Not all related PRs are merged. Failing the check."
             exit 1
-          else
-            echo "All related PRs are merged."
           fi
-
-      - name: End - All Related PRs Merged
-        if: ${{ steps.check_related_prs.outcome == 'success' }}
-        run: |
-          echo "Step 3: All related PRs have been successfully merged. Proceeding..."
