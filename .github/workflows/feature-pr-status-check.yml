@@ -1,0 +1,50 @@
+name: Check Related PRs Status Across Repositories
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+  repository_dispatch:
+    types: [check-related-prs]
+
+jobs:
+  check-related-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Related PRs in the PR Body
+        id: check_related_prs
+        run: |
+          # Extract related PR URLs from the PR body
+          RELATED_PRS=$(echo "${{ github.event.pull_request.body }}" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+')
+
+          # Check if related PRs are found
+          if [ -z "$RELATED_PRS" ]; then
+            echo "No related PRs found."
+            exit 0 # Exit early if there are no related PRs
+          fi
+
+          # Initialize flag to check if all related PRs are merged
+          ALL_MERGED=true
+
+          # Loop over each related PR URL and check its merge status
+          for PR_URL in $RELATED_PRS; do
+            PR_NUMBER=$(basename "$PR_URL")
+            REPO_FULL_NAME=$(echo "$PR_URL" | sed 's|https://github.com/||' | sed 's|/pull/.*||')
+
+            # Get the PR status using GitHub API
+            PR_STATUS=$(curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$REPO_FULL_NAME/pulls/$PR_NUMBER" | jq -r '.merged')
+
+            # If the PR is not merged, mark as not merged and fail the check
+            if [ "$PR_STATUS" != "true" ]; then
+              ALL_MERGED=false
+              echo "Related PR $PR_URL is not merged."
+            fi
+          done
+
+          # Fail the check if not all PRs are merged
+          if [ "$ALL_MERGED" != "true" ]; then
+            echo "Not all related PRs are merged. Failing the check."
+            exit 1
+          else
+            echo "All related PRs are merged. Passing the check."
+          fi
