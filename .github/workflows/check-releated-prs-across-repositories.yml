@@ -1,10 +1,8 @@
 name: Check Related PRs Status Across Repositories
 
 on:
-  pull_request:
-    types: [opened, synchronize]
   repository_dispatch:
-    types: [check-related-prs]
+    types: [check-related-prs]  # Listen for the event triggered by the linked repositories
 
 jobs:
   check-related-prs:
@@ -13,8 +11,8 @@ jobs:
       - name: Check Related PRs in the PR Body
         id: check_related_prs
         run: |
-          # Extract related PR URLs from the PR body
-          RELATED_PRS=$(echo "${{ github.event.pull_request.body }}" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+')
+          # Extract related PR URLs from the main PR body
+          RELATED_PRS=$(echo "${{ github.event.client_payload.pull_request_body }}" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+')
 
           # Check if related PRs are found
           if [ -z "$RELATED_PRS" ]; then
