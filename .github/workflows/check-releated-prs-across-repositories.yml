@@ -74,4 +74,5 @@ jobs:
 
       - name: End - All Related PRs Merged
         if: ${{ steps.check_related_prs.outcome == 'success' }}
-        run: echo "Step 3: All related PRs have been successfully merged. Proceeding..."
+        run: |
+          echo "Step 3: All related PRs have been successfully merged. Proceeding..."
