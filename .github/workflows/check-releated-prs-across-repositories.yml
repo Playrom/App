@@ -1,24 +1,13 @@
 name: Check All Related PRs Status Across Repositories
 
 on:
-  repository_dispatch:
-    types: [check-related-prs]  # Triggered by dispatch from linked repositories
   pull_request:
-    types: [opened, synchronize]  # Also triggered on main PR creation or update
+    types: [opened, synchronize]  # Trigger only on main PR creation or update
 
 jobs:
   check-related-prs:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' || github.event.pull_request  # Ensure it's only triggered by PR events
     steps:
-      - name: Ensure PR Context
-        run: |
-          if [ "${{ github.event.pull_request.number }}" == "" ]; then
-            echo "This action should only run within a pull request context. Exiting."
-            exit 1
-          fi
-        shell: bash
-
       - name: Start - Extract Related PRs from Main PR Body
         run: |
           echo "Step 1: Starting extraction of related PRs from the main PR body..."
@@ -29,7 +18,7 @@ jobs:
           echo "Extracting related PR URLs from the main PR description..."
           # Extract related PR URLs from the PR body and handle multiline properly
           RELATED_PRS=$(echo "${{ github.event.pull_request.body }}" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
-          
+
           # Check if related PRs are found
           if [ -z "$RELATED_PRS" ]; then
             echo "No related PRs found. Assuming no dependencies."
@@ -85,5 +74,4 @@ jobs:
 
       - name: End - All Related PRs Merged
         if: ${{ steps.check_related_prs.outcome == 'success' }}
-        run: |
-          echo "Step 3: All related PRs have been successfully merged. Proceeding..."
+        run: echo "Step 3: All related PRs have been successfully merged. Proceeding..."

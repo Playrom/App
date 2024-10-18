@@ -1,0 +1,35 @@
+name: Check all PRs
+
+on:
+  repository_dispatch:
+    types: [check-related-prs]
+
+jobs:
+  rerun-pr-verifications:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch All Open PRs
+        id: fetch_prs
+        run: |
+          echo "Fetching all open PRs in the repository..."
+          prs=$(curl -s -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open" | jq -r '.[].number')
+          
+          if [ -z "$prs" ]; then
+            echo "No open pull requests found."
+            exit 0
+          fi
+
+          echo "Open PRs found: $prs"
+          echo "open_prs=$prs" >> $GITHUB_OUTPUT
+
+      - name: Rerun PR Checks for Each PR
+        run: |
+          for pr in ${{ steps.fetch_prs.outputs.open_prs }}; do
+            echo "Re-triggering checks for PR #$pr"
+            curl -X POST \
+              -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-releated-prs-across-repositories.yml/dispatches" \
+              -d "{\"ref\":\"refs/pull/$pr/head\"}"
+          done
