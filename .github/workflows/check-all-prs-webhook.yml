@@ -12,7 +12,7 @@ jobs:
         id: fetch_prs_with_branches
         run: |
           echo "Fetching all open PRs with branch names in the repository..."
-          response=$(curl -s -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+          response=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
 
           # Extract PR numbers and branch names from the response
@@ -36,7 +36,7 @@ jobs:
             # Trigger the check-related-prs workflow for this PR's branch
             echo "Re-triggering checks for branch $branch"
             curl -X POST \
-              -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+              -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
               "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-related-prs.yml/dispatches" \
               -d "{\"ref\":\"$branch\"}"
