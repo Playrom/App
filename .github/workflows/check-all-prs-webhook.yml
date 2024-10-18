@@ -1,4 +1,4 @@
-name: Check all PRs
+name: Rerun PR Verification on Dispatch
 
 on:
   repository_dispatch:
@@ -8,28 +8,36 @@ jobs:
   rerun-pr-verifications:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch All Open PRs
-        id: fetch_prs
+      - name: Fetch All Open PRs with Branch Names
+        id: fetch_prs_with_branches
         run: |
-          echo "Fetching all open PRs in the repository..."
-          prs=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open" | jq -r '.[].number')
-          
+          echo "Fetching all open PRs with branch names in the repository..."
+          response=$(curl -s -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
+
+          # Extract PR numbers and branch names from the response
+          prs=$(echo "$response" | jq -r '.[] | {number: .number, branch: .head.ref} | @base64')
+
           if [ -z "$prs" ]; then
             echo "No open pull requests found."
             exit 0
           fi
 
-          echo "Open PRs found: $prs"
-          echo "open_prs=$prs" >> $GITHUB_OUTPUT
+          echo "PRs and Branches found:"
+          echo "$prs"
 
-      - name: Rerun PR Checks for Each PR
-        run: |
-          for pr in ${{ steps.fetch_prs.outputs.open_prs }}; do
-            echo "Re-triggering checks for PR #$pr"
+          # Process PR numbers and branch names directly
+          for pr in $prs; do
+            pr_json=$(echo "$pr" | base64 --decode)
+            number=$(echo "$pr_json" | jq -r '.number')
+            branch=$(echo "$pr_json" | jq -r '.branch')
+            echo "PR #$number on branch $branch"
+
+            # Trigger the check-related-prs workflow for this PR's branch
+            echo "Re-triggering checks for branch $branch"
             curl -X POST \
-              -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
+              -H "Authorization: token ${{ secrets.USER_ACTION_TOKEN }}" \
               -H "Accept: application/vnd.github.v3+json" \
-              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-releated-prs-across-repositories.yml/dispatches" \
-              -d "{\"ref\":\"refs/pull/$pr/head\"}"
+              "https://api.github.com/repos/${{ github.repository }}/actions/workflows/check-related-prs.yml/dispatches" \
+              -d "{\"ref\":\"$branch\"}"
           done
