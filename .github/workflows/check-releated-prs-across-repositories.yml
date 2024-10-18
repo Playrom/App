@@ -2,24 +2,45 @@ name: Check All Related PRs Status Across Repositories
 
 on:
   pull_request:
-    types: [opened, synchronize]  # Triggers on PR creation or updates
-  workflow_dispatch:  # Allows manual/API triggering for rechecks
+    types: [opened, synchronize]
+  workflow_dispatch:
+    inputs:
+      pr_body:
+        description: "The body of the pull request"
+        required: true  # Make sure the pr_body is passed when manually triggered
 
 jobs:
   check-related-prs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Check if event is a pull request or dispatch
+        id: check_event
+        run: |
+          # Check if the event is pull_request or workflow_dispatch
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            echo "This is a pull request event."
+            PR_BODY="${{ github.event.pull_request.body }}"
+          elif [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "This is a workflow dispatch event."
+            PR_BODY="${{ github.event.inputs.pr_body }}"
+          fi
+
+          if [ -z "$PR_BODY" ]; then
+            echo "No PR body provided. Exiting..."
+            exit 1
+          fi
+
+          echo "PR Body: $PR_BODY"
+
       - name: Start - Extract Related PRs from Main PR Body
         id: extract_related_prs
+        if: ${{ success() && steps.check_event.outcome == 'success' }}  # Only run if the previous step was successful
         run: |
           echo "Step 1: Extracting related PR URLs from the main PR body..."
+          # Extract related PR URLs from the PR body.
+          RELATED_PRS=$(echo "$PR_BODY" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
 
-          # Extract URLs of related PRs from the PR body.
-          # These URLs should follow the pattern https://github.com/<owner>/<repo>/pull/<number>.
-          RELATED_PRS=$(echo "${{ github.event.pull_request.body }}" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
-
-          # Check if we found any related PRs in the PR body.
           if [ -z "$RELATED_PRS" ]; then
             echo "No related PRs found in the PR body. Assuming no dependencies."
             echo "Marking all as merged since no PRs found."
@@ -27,25 +48,25 @@ jobs:
             exit 0
           fi
 
-          # Print the found related PRs.
           echo "Related PRs found: $RELATED_PRS"
-
-          # Store the found related PRs as output to be used in the next step.
-          echo "related_prs=$RELATED_PRS" >> $GITHUB_OUTPUT
+          # Set output properly using the $GITHUB_OUTPUT file
+          echo "related_prs=$RELATED_PRS" >> $GITHUB_OUTPUT  # Properly sets output for later use
           echo "Output set: Related PRs = $RELATED_PRS"
 
       - name: Print Extracted PRs for Debugging
+        if: ${{ success() && steps.extract_related_prs.outcome == 'success' }}  # Only run if extraction was successful
         run: |
-          # Debug step to print extracted PRs.
           echo "Debugging: Printing extracted related PRs."
           echo "Related PRs: ${{ steps.extract_related_prs.outputs.related_prs }}"
 
       - name: Start - Checking Status of Each Related PR
+        if: ${{ success() && steps.extract_related_prs.outcome == 'success' }}  # Only run if the previous steps were successful
         run: |
           echo "Step 2: Checking the merge status of each related PR..."
 
       - name: Check Status of Each Related PR
         id: check_related_prs
+        if: ${{ success() && steps.extract_related_prs.outcome == 'success' }}  # Only run if related PRs were found
         run: |
           # Initialize flag to track if all related PRs are merged.
           ALL_MERGED=true
@@ -88,5 +109,6 @@ jobs:
           fi
 
       - name: Final - Print Merge Status of All PRs
+        if: ${{ success() && steps.check_related_prs.outcome == 'success' }}  # Only run if all checks were successful
         run: |
           echo "Step 3: All related PRs have been successfully checked."
