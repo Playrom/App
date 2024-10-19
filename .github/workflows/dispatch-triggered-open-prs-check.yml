@@ -1,0 +1,80 @@
+name: Dispatch Triggered Open PRs Check
+
+on:
+  repository_dispatch:
+    types: [dispatch-triggered-open-prs-check]
+  workflow_dispatch:  # Allows manual triggers if needed
+    inputs:
+
+jobs:
+  dispatch-triggered-open-prs-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Fetch All Open PRs
+        id: fetch_prs
+        run: |
+          echo "Fetching all open PRs in the repository..."
+          response=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
+
+          # Extract PR numbers, bodies, and branches from the response
+          prs=$(echo "$response" | jq -r '.[] | {number: .number, body: .body, branch: .head.ref} | @base64')
+
+          if [ -z "$prs" ]; then
+            echo "No open pull requests found."
+            exit 0
+          fi
+
+          # Iterate over each PR and check status
+          for pr in $prs; do
+            pr_json=$(echo "$pr" | base64 --decode)
+            pr_number=$(echo "$pr_json" | jq -r '.number')
+            pr_body=$(echo "$pr_json" | jq -r '.body')
+            pr_branch=$(echo "$pr_json" | jq -r '.branch')
+
+            echo "Processing PR #$pr_number on branch $pr_branch"
+
+            # Set environment variables for subsequent steps
+            echo "PR_NUMBER=$pr_number" >> $GITHUB_ENV
+            echo "PR_BODY=$pr_body" >> $GITHUB_ENV
+            echo "PR_BRANCH=$pr_branch" >> $GITHUB_ENV
+
+            # Check related PRs status inline for each PR
+            echo "Checking related PRs for PR #$pr_number"
+            RELATED_PRS=$(echo "$pr_body" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
+            if [ -z "$RELATED_PRS" ]; then
+              echo "No related PRs found for PR #$pr_number. Marking all as merged."
+              continue
+            fi
+
+            ALL_MERGED=true
+
+            for PR_URL in $RELATED_PRS; do
+              PR_NUMBER=$(basename "$PR_URL")
+              REPO_FULL_NAME=$(echo "$PR_URL" | sed 's|https://github.com/||' | sed 's|/pull/.*||')
+
+              # Fetch PR details using GitHub API
+              PR_STATUS=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
+                "https://api.github.com/repos/$REPO_FULL_NAME/pulls/$PR_NUMBER" | jq -r '.merged')
+
+              if [ "$PR_STATUS" != "true" ]; then
+                echo "Related PR $PR_URL is NOT merged."
+                ALL_MERGED=false
+              else
+                echo "Related PR $PR_URL is merged."
+              fi
+            done
+
+            # If all PRs are merged, update the status of the PR
+            if [ "$ALL_MERGED" == "true" ]; then
+              echo "All related PRs for PR #$pr_number are merged. Updating status."
+              curl -X POST \
+                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
+                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Related PR Check\"}"
+            else
+              echo "Not all related PRs are merged for PR #$pr_number."
+            fi
+          done
