@@ -1,11 +1,8 @@
 name: Dispatch Triggered Open PRs Check
-
 on:
   repository_dispatch:
     types: [dispatch-triggered-open-prs-check]
   workflow_dispatch:  # Allows manual triggers if needed
-    inputs:
-
 jobs:
   dispatch-triggered-open-prs-check:
     runs-on: ubuntu-latest
@@ -19,7 +16,7 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
 
           # Extract PR numbers, bodies, and branches from the response
-          prs=$(echo "$response" | jq -r '.[] | {number: .number, body: .body, branch: .head.ref} | @base64')
+          prs=$(echo "$response" | jq -r '.[] | {number: .number, body: .body, branch: .head.ref, sha: .head.sha} | @base64')
 
           if [ -z "$prs" ]; then
             echo "No open pull requests found."
@@ -32,6 +29,7 @@ jobs:
             pr_number=$(echo "$pr_json" | jq -r '.number')
             pr_body=$(echo "$pr_json" | jq -r '.body')
             pr_branch=$(echo "$pr_json" | jq -r '.branch')
+            pr_sha=$(echo "$pr_json" | jq -r '.sha')
 
             echo "Processing PR #$pr_number on branch $pr_branch"
 
@@ -72,9 +70,14 @@ jobs:
               curl -X POST \
                 -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
                 -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Related PR Check\"}"
+                "https://api.github.com/repos/${{ github.repository }}/statuses/$pr_sha" \
+                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
             else
               echo "Not all related PRs are merged for PR #$pr_number."
+              curl -X POST \
+                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
+                -H "Accept: application/vnd.github.v3+json" \
+                "https://api.github.com/repos/${{ github.repository }}/statuses/$pr_sha" \
+                -d "{\"state\": \"failure\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
             fi
           done
