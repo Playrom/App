@@ -36,9 +36,9 @@ jobs:
             echo "Processing PR #$pr_number on branch $pr_branch"
 
             # Set environment variables for subsequent steps
-            echo "PR_NUMBER=$pr_number" >> $GITHUB_ENV
-            echo "PR_BODY=$pr_body" >> $GITHUB_ENV
-            echo "PR_BRANCH=$pr_branch" >> $GITHUB_ENV
+            echo "PR Number: #$pr_number"
+            echo "PR Body: $pr_body"
+            echo "PR Branch: $pr_branch"
 
             # Check related PRs status inline for each PR
             echo "Checking related PRs for PR #$pr_number"
