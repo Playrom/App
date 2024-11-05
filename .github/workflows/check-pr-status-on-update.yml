@@ -19,12 +19,6 @@ jobs:
           RELATED_PRS=$(echo "$PR_BODY" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
           if [ -z "$RELATED_PRS" ]; then
             echo "No related PRs found. Marking all as merged."
-            echo "all_merged=true" >> $GITHUB_ENV
-              curl -X POST \
-                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
             exit 0
           fi
 
@@ -32,6 +26,7 @@ jobs:
           echo "related_prs=$RELATED_PRS" >> $GITHUB_OUTPUT
 
       - name: Check Status of Each Related PR
+        if: success()
         run: |
           ALL_MERGED=true
           echo "Checking the status of each related PR..."
@@ -40,8 +35,7 @@ jobs:
             PR_NUMBER=$(basename "$PR_URL")
             REPO_FULL_NAME=$(echo "$PR_URL" | sed 's|https://github.com/||' | sed 's|/pull/.*||')
 
-            # Fetch the PR status via the GitHub API
-            echo "Checking PR #$PR_NUMBER in repository $REPO_FULL_NAME..."
+            # Fetch the PR status using GitHub API
             PR_STATUS=$(curl -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
               "https://api.github.com/repos/$REPO_FULL_NAME/pulls/$PR_NUMBER" | jq -r '.merged')
 
@@ -53,18 +47,11 @@ jobs:
             fi
           done
 
+          # If all related PRs are merged, set success; otherwise, exit with failure
           if [ "$ALL_MERGED" == "true" ]; then
             echo "All related PRs are merged."
-              curl -X POST \
-                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
+            exit 0
           else
             echo "Not all related PRs are merged. Exiting."
-              curl -X POST \
-                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/${{ github.sha }}" \
-                -d "{\"state\": \"failure\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
+            exit 1
           fi

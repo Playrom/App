@@ -1,8 +1,10 @@
 name: Dispatch Triggered Open PRs Check
+
 on:
   repository_dispatch:
     types: [dispatch-triggered-open-prs-check]
   workflow_dispatch:  # Allows manual triggers if needed
+
 jobs:
   dispatch-triggered-open-prs-check:
     runs-on: ubuntu-latest
@@ -15,7 +17,7 @@ jobs:
           response=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
 
-          # Extract PR numbers, bodies, and branches from the response
+          # Extract PR numbers, bodies, branches, and SHAs from the response
           prs=$(echo "$response" | jq -r '.[] | {number: .number, body: .body, branch: .head.ref, sha: .head.sha} | @base64')
 
           if [ -z "$prs" ]; then
@@ -33,56 +35,21 @@ jobs:
 
             echo "Processing PR #$pr_number on branch $pr_branch"
 
-            # Set environment variables for subsequent steps
-            echo "PR Number: #$pr_number"
-            echo "PR Body: $pr_body"
-            echo "PR Branch: $pr_branch"
-
             # Check related PRs status inline for each PR
             echo "Checking related PRs for PR #$pr_number"
-            RELATED_PRS=$(echo "$pr_body" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
-            if [ -z "$RELATED_PRS" ]; then
-              echo "No related PRs found for PR #$pr_number. Marking all as merged."
+            workflow_runs=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/actions/runs?event=pull_request&branch=$pr_branch" | jq '.workflow_runs')
+
+            # Find the latest run specific to this PR
+            latest_run_id=$(echo "$workflow_runs" | jq -r "[.[] | select(.pull_requests[].number == $pr_number)][0].id")
+
+            if [ -n "$latest_run_id" ] && [ "$latest_run_id" != "null" ]; then
+              echo "Re-running workflow for PR #$pr_number with run ID $latest_run_id"
               curl -X POST \
                 -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
                 -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/$pr_sha" \
-                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
-              continue
-            fi
-
-            ALL_MERGED=true
-
-            for PR_URL in $RELATED_PRS; do
-              PR_NUMBER=$(basename "$PR_URL")
-              REPO_FULL_NAME=$(echo "$PR_URL" | sed 's|https://github.com/||' | sed 's|/pull/.*||')
-
-              # Fetch PR details using GitHub API
-              PR_STATUS=$(curl -s -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-                "https://api.github.com/repos/$REPO_FULL_NAME/pulls/$PR_NUMBER" | jq -r '.merged')
-
-              if [ "$PR_STATUS" != "true" ]; then
-                echo "Related PR $PR_URL is NOT merged."
-                ALL_MERGED=false
-              else
-                echo "Related PR $PR_URL is merged."
-              fi
-            done
-
-            # If all PRs are merged, update the status of the PR
-            if [ "$ALL_MERGED" == "true" ]; then
-              echo "All related PRs for PR #$pr_number are merged. Updating status."
-              curl -X POST \
-                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/$pr_sha" \
-                -d "{\"state\": \"success\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
+                "https://api.github.com/repos/${{ github.repository }}/actions/runs/$latest_run_id/rerun"
             else
-              echo "Not all related PRs are merged for PR #$pr_number."
-              curl -X POST \
-                -H "Authorization: Bearer ${{ secrets.USER_ACTION_TOKEN }}" \
-                -H "Accept: application/vnd.github.v3+json" \
-                "https://api.github.com/repos/${{ github.repository }}/statuses/$pr_sha" \
-                -d "{\"state\": \"failure\", \"description\": \"All related PRs merged\", \"context\": \"Dependencies PRs\"}"
+              echo "No recent workflow run found for PR #$pr_number"
             fi
           done
