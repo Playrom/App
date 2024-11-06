@@ -13,12 +13,20 @@ jobs:
         id: extract_related_prs
         run: |
           PR_BODY="${{ github.event.pull_request.body }}"
-          echo "Extracting related PR URLs from the PR body..."
+          echo "Extracting related PR URLs from the '## Dependencies Pull Requests' section in the PR body..."
 
-          # Extract related PR URLs from the PR body
-          RELATED_PRS=$(echo "$PR_BODY" | grep -Eo 'https://github.com/[a-zA-Z0-9._-]+/[a-zA-Z0-9._-]+/pull/[0-9]+' | tr '\n' ' ')
+          # Extract the section "## Dependencies Pull Requests" and the table within it
+          SECTION=$(echo "$PR_BODY" | awk '/## Dependencies Pull Requests/,/^## /')
+          if [ -z "$SECTION" ]; then
+            echo "No '## Dependencies Pull Requests' section found. Marking all as merged."
+            exit 0
+          fi
+
+          # Extract related PR URLs from the table rows in the extracted section
+          RELATED_PRS=$(echo "$SECTION" | grep -Eo '\| [^|]+ \| \[PR #[0-9]+\]\(https://github.com/[^/]+/[^/]+/pull/[0-9]+\)' | grep -Eo 'https://github.com/[^/]+/[^/]+/pull/[0-9]+' | tr '\n' ' ')
+
           if [ -z "$RELATED_PRS" ]; then
-            echo "No related PRs found. Marking all as merged."
+            echo "No related PRs found in the '## Dependencies Pull Requests' section. Marking all as merged."
             exit 0
           fi
 
